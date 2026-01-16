@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RPS Multiplayer</title>
+</head>
+<body>
+
+<h2>Join Game</h2>
+<input id="name" placeholder="Your name">
+<input id="room" placeholder="Room name">
+<button onclick="join()">Join</button>
+
+<div id="game" style="display:none">
+  <h3 id="players"></h3>
+
+  <button onclick="play('rock')">Rock</button>
+  <button onclick="play('paper')">Paper</button>
+  <button onclick="play('scissors')">Scissors</button>
+
+  <h3 id="status"></h3>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="client.js"></script>
+</body>
+</html>

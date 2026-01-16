@@ -1,0 +1,205 @@
+/**
+ * ================================
+ * Rock Paper Scissors Multiplayer
+ * Backend Server (Node.js)
+ * ================================
+ */
+
+/* ---------- Imports ---------- */
+
+const express = require("express"); // Express: simple web framework for Node.js
+const http = require("http"); // HTTP: required to attach Socket.IO to Express
+const { Server } = require("socket.io"); // Socket.IO: real-time communication (WebSockets)
+
+/* ---------- Server Setup ---------- */
+
+
+const app = express(); // Create express app
+const server = http.createServer(app); // Create raw HTTP server from express app
+const io = new Server(server); // Attach Socket.IO to the HTTP server
+app.use(express.static("public")); // Serve static frontend files from /public folder
+
+/* ---------- Game State (IN MEMORY) ---------- */
+
+/**
+ * rooms object holds ALL game data
+ *
+ * Structure:
+ * rooms = {
+ *   roomName: {
+ *     players: {
+ *       socketId: { name: string, score: number }
+ *     },
+ *     choices: {
+ *       socketId: "rock" | "paper" | "scissors"
+ *     }
+ *   }
+ * }
+ */
+const rooms = {};
+
+/* ---------- Socket.IO Connection ---------- */
+
+io.on("connection", (socket) => {
+  console.log("Player connected:", socket.id);
+
+  // Player joins a room with a name
+  
+  socket.on("joinRoom", ({ room, name }) => {
+    // Join socket.io room (for broadcasting)
+    socket.join(room);
+
+    // Create room if it does not exist
+    if (!rooms[room]) {
+      rooms[room] = {
+        players: {},
+        choices: {}
+      };
+    }
+    if (!room || !room.trim()) {
+  socket.emit("errorMessage", "Room name is required");
+  return;
+}
+
+    // Limit room to 2 players
+    if (Object.keys(rooms[room].players).length >= 2) {
+      socket.emit("errorMessage", "Room is full");
+      return;
+    }
+
+    // Save player info
+    rooms[room].players[socket.id] = {
+      name: name,
+      score: 0
+    };
+
+    // Store room name on socket for easy access later
+    socket.room = room;
+
+    // Notify everyone in room about updated players
+    io.to(room).emit("roomUpdate", rooms[room].players);
+  });
+
+  // Player sends their RPS choice
+  
+  socket.on("choice", (choice) => {
+    const room = socket.room;
+    if (!room) return;
+
+    // Save player's choice
+    rooms[room].choices[socket.id] = choice;
+
+    // Only continue once BOTH players made a choice
+    if (Object.keys(rooms[room].choices).length === 2) {
+
+      // Get both player socket IDs
+      const [id1, id2] = Object.keys(rooms[room].choices);
+
+      // Get their choices
+      const c1 = rooms[room].choices[id1];
+      const c2 = rooms[room].choices[id2];
+
+      // Determine winner (returns socketId or null)
+      const winnerId = getWinner(id1, c1, id2, c2);
+
+      // Increase score for winner (if not a draw)
+      if (winnerId) {
+        rooms[room].players[winnerId].score++;
+      }
+      // Send updated scores to everyone in the room
+      io.to(room).emit("roomUpdate", rooms[room].players);
+
+      // Send results to both players
+      io.to(id1).emit(
+        "result",
+        buildResult(room, id1, id2, c1, c2, winnerId)
+      );
+
+      io.to(id2).emit(
+        "result",
+        buildResult(room, id2, id1, c2, c1, winnerId)
+      );
+
+      // Clear choices for next round
+      rooms[room].choices = {};
+    }
+  });
+
+  /**
+   * Handle player disconnect
+   */
+  socket.on("disconnect", () => {
+    const room = socket.room;
+    if (!room || !rooms[room]) return;
+
+    // Remove player data
+    delete rooms[room].players[socket.id];
+    delete rooms[room].choices[socket.id];
+
+    // Notify remaining players
+    io.to(room).emit("roomUpdate", rooms[room].players);
+
+    // Delete room if empty
+    if (Object.keys(rooms[room].players).length === 0) {
+      delete rooms[room];
+    }
+
+    console.log("Player disconnected:", socket.id);
+  });
+});
+
+/* ---------- Game Logic ---------- */
+
+/**
+ * Determines the winner of a round
+ *
+ * @param id1 socket ID of player 1
+ * @param c1 choice of player 1
+ * @param id2 socket ID of player 2
+ * @param c2 choice of player 2
+ * @returns socketId of winner OR null for draw
+ */
+function getWinner(id1, c1, id2, c2) {
+  // Draw case
+  if (c1 === c2) return null;
+
+  // What each choice beats
+  const wins = {
+    rock: "scissors",
+    scissors: "paper",
+    paper: "rock"
+  };
+
+  // If player 1 wins, return id1; otherwise id2
+  return wins[c1] === c2 ? id1 : id2;
+}
+
+/**
+ * Builds the result object sent to a player
+ */
+function buildResult(room, you, opp, yourChoice, oppChoice, winnerId) {
+  const players = rooms[room].players;
+
+  let resultText = "Draw!";
+  if (winnerId) {
+    resultText = winnerId === you ? "You win!" : "You lose!";
+  }
+
+  return {
+    yourChoice,
+    opponentChoice: oppChoice,
+    opponentName: players[opp].name,
+    yourScore: players[you].score,
+    opponentScore: players[opp].score,
+    result: resultText
+  };
+}
+
+/* ---------- Start Server ---------- */
+
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
+
