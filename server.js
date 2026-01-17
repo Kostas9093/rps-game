@@ -66,7 +66,7 @@ io.on("connection", (socket) => {
         players: {},
         choices: {},
         round: 1,
-        maxRounds: 10
+        maxRounds: 5
       };
   }
     
