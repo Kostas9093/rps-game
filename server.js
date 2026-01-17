@@ -66,7 +66,8 @@ io.on("connection", (socket) => {
         players: {},
         choices: {},
         round: 1,
-        maxRounds: 5
+        maxRounds: 5,
+        playAgainVotes: {}
       };
   }
     
@@ -132,11 +133,7 @@ io.on("connection", (socket) => {
       // Advance to next round
       rooms[room].round++;
 
-      // CHECK IF GAME IS OVER
-      if (rooms[room].round > rooms[room].maxRounds) {
-         endGame(room);
-         return;
-      }
+      
 
       // Send results to both players
       io.to(id1).emit(
@@ -151,24 +148,60 @@ io.on("connection", (socket) => {
 
       // Clear choices for next round
       rooms[room].choices = {};
+
+      // CHECK IF GAME IS OVER
+      if (rooms[room].round > rooms[room].maxRounds) {
+         endGame(room);
+         return;
+      }
     }
   });
    
-     socket.on("playAgain", () => {
+ // Player asks to play again
+socket.on("playAgain", () => {
   const room = socket.room;
   if (!room || !rooms[room]) return;
 
-  rooms[room].round = 1;
-  rooms[room].choices = {};
+  const players = rooms[room].players;
+  const playerName = players[socket.id].name;
 
-  // Reset scores
-  for (const id in rooms[room].players) {
-    rooms[room].players[id].score = 0;
-  }
+  // Mark this player as WANTING to play again
+  rooms[room].playAgainVotes[socket.id] = true;
 
-  io.to(room).emit("roomUpdate", rooms[room].players);
-  io.to(room).emit("newGame");
+  // Ask the other player
+  socket.to(room).emit("playAgainRequest", {
+    from: playerName
   });
+});
+
+// Player ACCEPTS replay
+socket.on("acceptPlayAgain", () => {
+  const room = socket.room;
+  if (!room || !rooms[room]) return;
+
+  rooms[room].playAgainVotes[socket.id] = true;
+
+  // If BOTH accepted → restart
+  if (Object.keys(rooms[room].playAgainVotes).length === 2) {
+    restartGame(room);
+  }
+});
+
+// Player REJECTS replay
+socket.on("rejectPlayAgain", () => {
+  const room = socket.room;
+  if (!room || !rooms[room]) return;
+
+  const name = rooms[room].players[socket.id].name;
+
+  // Clear votes
+  rooms[room].playAgainVotes = {};
+
+  io.to(room).emit("playAgainRejected", {
+    by: name
+  });
+});
+
 
   /**
    * Handle player disconnect
@@ -262,6 +295,19 @@ function endGame(room) {
   io.to(room).emit("gameOver", {
     winnerText
   });
+}
+
+function restartGame(room) {
+  rooms[room].round = 1;
+  rooms[room].choices = {};
+  rooms[room].playAgainVotes = {};
+
+  for (const id in rooms[room].players) {
+    rooms[room].players[id].score = 0;
+  }
+
+  io.to(room).emit("roomUpdate", rooms[room].players);
+  io.to(room).emit("newGame");
 }
 
 
