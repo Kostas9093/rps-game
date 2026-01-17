@@ -28,6 +28,11 @@ function play(choice) {
   socket.emit("choice", choice);
 }
 
+function playAgain() {
+  socket.emit("playAgain");
+}
+
+
 socket.on("roomUpdate", (players) => {
   const list = Object.values(players)
     .map(p => `${p.name}: ${p.score}`)
@@ -41,5 +46,16 @@ socket.on("result", (data) => {
 ${data.result}
 Score: You ${data.yourScore} - ${data.opponentScore}`;
 });
+
+socket.on("gameOver", (data) => {
+  status.innerText = data.winnerText;
+  document.getElementById("playAgain").style.display = "block";
+});
+
+socket.on("newGame", () => {
+  status.innerText = "New game started!";
+  document.getElementById("playAgain").style.display = "none";
+});
+
 
 socket.on("errorMessage", msg => alert(msg));

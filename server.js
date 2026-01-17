@@ -46,6 +46,17 @@ io.on("connection", (socket) => {
   // Player joins a room with a name
   
   socket.on("joinRoom", ({ room, name }) => {
+
+    if (!room || !room.trim()) {
+    socket.emit("errorMessage", "Room name is required");
+    return;
+    }
+
+    if (!name || !name.trim()) {
+    socket.emit("errorMessage", "Name is required");
+     return;
+   }
+
     // Join socket.io room (for broadcasting)
     socket.join(room);
 
@@ -53,13 +64,12 @@ io.on("connection", (socket) => {
     if (!rooms[room]) {
       rooms[room] = {
         players: {},
-        choices: {}
+        choices: {},
+        round: 1,
+        maxRounds: 10
       };
-    }
-    if (!room || !room.trim()) {
-  socket.emit("errorMessage", "Room name is required");
-  return;
-}
+  }
+    
 
     // Limit room to 2 players
     if (Object.keys(rooms[room].players).length >= 2) {
@@ -86,6 +96,15 @@ io.on("connection", (socket) => {
     const room = socket.room;
     if (!room) return;
 
+    // STOP game if max rounds reached
+    if (rooms[room].round > rooms[room].maxRounds) {
+    return;
+    }
+
+    if (Object.keys(rooms[room].players).length < 2) {
+      socket.emit("errorMessage", "Waiting for second player");
+      return;
+    }
     // Save player's choice
     rooms[room].choices[socket.id] = choice;
 
@@ -106,8 +125,18 @@ io.on("connection", (socket) => {
       if (winnerId) {
         rooms[room].players[winnerId].score++;
       }
+
       // Send updated scores to everyone in the room
       io.to(room).emit("roomUpdate", rooms[room].players);
+
+      // Advance to next round
+      rooms[room].round++;
+
+      // CHECK IF GAME IS OVER
+      if (rooms[room].round > rooms[room].maxRounds) {
+         endGame(room);
+         return;
+      }
 
       // Send results to both players
       io.to(id1).emit(
@@ -123,6 +152,22 @@ io.on("connection", (socket) => {
       // Clear choices for next round
       rooms[room].choices = {};
     }
+  });
+   
+     socket.on("playAgain", () => {
+  const room = socket.room;
+  if (!room || !rooms[room]) return;
+
+  rooms[room].round = 1;
+  rooms[room].choices = {};
+
+  // Reset scores
+  for (const id in rooms[room].players) {
+    rooms[room].players[id].score = 0;
+  }
+
+  io.to(room).emit("roomUpdate", rooms[room].players);
+  io.to(room).emit("newGame");
   });
 
   /**
@@ -194,6 +239,23 @@ function buildResult(room, you, opp, yourChoice, oppChoice, winnerId) {
     result: resultText
   };
 }
+
+function endGame(room) {
+  const players = rooms[room].players;
+  const ids = Object.keys(players);
+
+  const p1 = players[ids[0]];
+  const p2 = players[ids[1]];
+
+  let winnerText = "It's a draw!";
+  if (p1.score > p2.score) winnerText = `${p1.name} wins the game!`;
+  if (p2.score > p1.score) winnerText = `${p2.name} wins the game!`;
+
+  io.to(room).emit("gameOver", {
+    winnerText
+  });
+}
+
 
 /* ---------- Start Server ---------- */
 
