@@ -41,14 +41,18 @@ socket.on("roomUpdate", (players) => {
 });
 
 socket.on("result", (data) => {
+  let emoji = "🤝";
+  if (data.result === "You win!") emoji = "🏆";
+  if (data.result === "You lose!") emoji = "😞";
   status.innerText =
-    `You chose ${data.yourChoice}, ${data.opponentName} chose ${data.opponentChoice}.
-${data.result}
+  `🕹️ Round ${data.round} / ${data.maxRounds}<br><br>`
+    `You chose ${data.yourChoice}, ${data.opponentName} chose ${data.opponentChoice}<br>.
+ <strong>${data.result}</strong><br>
 Score: You ${data.yourScore} - ${data.opponentScore}`;
 });
 
 socket.on("gameOver", (data) => {
-  status.innerText = data.winnerText;
+  status.innerText = `🏁 <strong>${data.winnerText}</strong>`;
   document.getElementById("playAgain").style.display = "block";
 });
 

@@ -219,6 +219,12 @@ function getWinner(id1, c1, id2, c2) {
   return wins[c1] === c2 ? id1 : id2;
 }
 
+  const choiceEmoji = {
+  rock: "🪨",
+  paper: "📄",
+  scissors: "✂️"
+ };
+
 /**
  * Builds the result object sent to a player
  */
@@ -231,12 +237,14 @@ function buildResult(room, you, opp, yourChoice, oppChoice, winnerId) {
   }
 
   return {
-    yourChoice,
-    opponentChoice: oppChoice,
+    yourChoice: choiceEmoji[yourChoice],
+    opponentChoice: choiceEmoji[oppChoice],
     opponentName: players[opp].name,
     yourScore: players[you].score,
     opponentScore: players[opp].score,
-    result: resultText
+    result: resultText,
+    round: rooms[room].round - 1,   // because we incremented already
+    maxRounds: rooms[room].maxRounds
   };
 }
 
